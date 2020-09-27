@@ -29,10 +29,20 @@ cimport httpstan.stan as stan
 
 import httpstan.utils
 
+
+# dummy wrapper of ostream and std::cout, required by `new_model` function
+cdef extern from "<iostream>" namespace "std":
+    cdef cppclass ostream:
+      pass
+    ostream cout
+
+
+# Note about reference variables and Cython:
+# Cython does not allow declaration of a reference variable. Since new_model returns a reference variable,
+# we use this a work-around later: cdef stan.model_base * model = &new_model(...)
+# thanks: https://stackoverflow.com/a/49019830
 cdef extern from "${cpp_filename}" nogil:
-    cdef cppclass stan_model(stan.model_base):
-        stan_model(stan.var_context& var_context) except +
-        stan_model(stan.var_context& var_context, unsigned int random_seed) except +
+    cdef stan.model_base& new_model(stan.var_context& var_context, unsigned int random_seed, ostream* msg_stream) except +
 
 
 cdef stan.array_var_context * make_array_var_context(dict data):
@@ -60,9 +70,10 @@ cdef stan.array_var_context * make_array_var_context(dict data):
 
 
 def param_names(dict data):
-    """Call the ``get_params`` method of the ``stan_model``."""
+    """Call the ``get_params`` method of the model."""
     cdef stan.array_var_context * var_context_ptr = make_array_var_context(data)
-    cdef stan.model_base * model = new stan_model(deref(var_context_ptr))
+    # random_seed, the second argument, is unused but we must provide it. There is no other way to get an instance.
+    cdef stan.model_base * model = &new_model(deref(var_context_ptr), <unsigned int> 1, &cout)
 
     cdef vector[string] names
     model.get_param_names(names)
@@ -74,9 +85,10 @@ def param_names(dict data):
 
 
 def constrained_param_names(dict data):
-    """Call the ``constrained_param_names`` method of the ``stan_model``."""
+    """Call the ``constrained_param_names`` method of the model."""
     cdef stan.array_var_context * var_context_ptr = make_array_var_context(data)
-    cdef stan.model_base * model = new stan_model(deref(var_context_ptr))
+    # random_seed, the second argument, is unused but we must provide it. There is no other way to get an instance.
+    cdef stan.model_base * model = &new_model(deref(var_context_ptr), <unsigned int> 1, &cout)
 
     cdef vector[string] names
     model.constrained_param_names(names)
@@ -88,9 +100,10 @@ def constrained_param_names(dict data):
 
 
 def dims(dict data):
-    """Call the ``get_dims`` method of the ``stan_model``."""
+    """Call the ``get_dims`` method of the model."""
     cdef stan.array_var_context * var_context_ptr = make_array_var_context(data)
-    cdef stan.model_base * model = new stan_model(deref(var_context_ptr))
+    # random_seed, the second argument, is unused but we must provide it. There is no other way to get an instance.
+    cdef stan.model_base * model = &new_model(deref(var_context_ptr), <unsigned int> 1, &cout)
 
     cdef vector[vector[size_t]] dims_
     model.get_dims(dims_)
@@ -127,7 +140,8 @@ def hmc_nuts_diag_e_adapt_wrapper(
     cdef int return_code
     cdef stan.array_var_context * var_context_ptr = make_array_var_context(data)
     cdef stan.var_context * init_var_context
-    cdef stan.model_base * model = new stan_model(deref(var_context_ptr), <unsigned int> random_seed)
+    cdef stan.model_base * model = &new_model(deref(var_context_ptr), <unsigned int> 1, &cout)
+
     cdef stan.interrupt interrupt
     cdef stan.logger * logger = new stan.socket_logger(socket_filename.c_str(), b'logger:')
     cdef stan.writer * init_writer = new stan.socket_writer(socket_filename.c_str(), b'init_writer:')
