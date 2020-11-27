@@ -1,0 +1,5 @@
+# Serialization Benchmarks
+
+## Requirements
+
+- `hyperfine`

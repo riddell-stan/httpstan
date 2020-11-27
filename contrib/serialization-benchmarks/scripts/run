@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+
+VERSIONS="2.1.0 2.3.0 4.0.0"
+BENCHMARK_SCRIPTS="schools_8schools_20000draws.py schools_800schools_1000draws.py"
+
+for version in $VERSIONS; do
+    python3 -m venv --system-site-packages venv-${version}
+    VENV="venv-${version}"
+    ${VENV}/bin/pip install -q "httpstan==${version}"
+done
+
+mkdir -p build
+for version in $VERSIONS; do
+    for script in $BENCHMARK_SCRIPTS; do
+        python3 -m venv --system-site-packages venv-${version}
+        VENV="venv-${version}"
+        ${VENV}/bin/python -m httpstan &
+        sleep 1
+        HTTPSTAN_PID=$!
+        echo PID: $HTTPSTAN_PID
+        hyperfine -w 2 "${VENV}/bin/python ${script}" --export-json build/results-${script%.py}-${version}.json
+        kill $HTTPSTAN_PID
+        sleep 1
+        ! ps -q $HTTPSTAN_PID > /dev/null || echo "httpstan server was not killed, aborting"
+    done
+done
+echo 'results are in the `build` directory.'
